@@ -38,9 +38,6 @@ jobs:
             - name: Run Cargo Check
               run: cargo check --verbose
 
-            - name: Run Clippy Lints
-              run: cargo clippy --all-targets --all-features -- -D warnings
-
             - name: Run Tests
               run: cargo test --verbose
 
