@@ -72,6 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
         config: config_arc,
         monitor_manager,
         config_path,
+        start_time: chrono::Utc::now(),
     });
 
     let app = api::create_router(state);
