@@ -25,7 +25,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // 2. Determine configuration file path
     let args: Vec<String> = std::env::args().collect();
     let config_path = if args.len() > 1 {
-        args[1].clone()
+        let path = args[1].clone();
+        let path_lower = path.to_lowercase();
+        if !path_lower.ends_with(".yaml") && !path_lower.ends_with(".yml") && !path_lower.ends_with(".json") {
+            anyhow::bail!(
+                "Configuration file must have a .yaml, .yml, or .json extension. Got: '{}'",
+                path
+            );
+        }
+        path
     } else {
         if std::path::Path::new("config.yaml").exists() {
             "config.yaml".to_string()
