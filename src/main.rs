@@ -1,14 +1,14 @@
+mod api;
 mod config;
 mod monitor;
-mod api;
 
+use anyhow::Context;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use anyhow::Context;
 
+use crate::api::AppState;
 use crate::config::{Config, LdapTargetConfig, SearchCheckConfig, SearchScope};
 use crate::monitor::MonitorManager;
-use crate::api::AppState;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -38,7 +38,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // 3. Load or generate default configuration
     let config = if !std::path::Path::new(&config_path).exists() {
-        tracing::info!("Config file not found. Generating default template at '{}'", config_path);
+        tracing::info!(
+            "Config file not found. Generating default template at '{}'",
+            config_path
+        );
         generate_default_config(&config_path)?
     } else {
         tracing::info!("Loading config from '{}'", config_path);
@@ -78,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let listener = tokio::net::TcpListener::bind(&bind_address)
         .await
         .with_context(|| format!("Failed to bind to HTTP address '{}'", bind_address))?;
-        
+
     axum::serve(listener, app)
         .await
         .context("Error running Axum server")?;
@@ -89,30 +92,28 @@ async fn main() -> Result<(), anyhow::Error> {
 fn generate_default_config(path: &str) -> Result<Config, anyhow::Error> {
     let default_cfg = Config {
         bind_address: "0.0.0.0:8080".to_string(),
-        ldaps: vec![
-            LdapTargetConfig {
-                id: "local_ldap_sample".to_string(),
-                url: "ldap://localhost:389".to_string(),
-                bind_dn: Some("cn=admin,dc=example,dc=com".to_string()),
-                bind_password: Some("adminpassword".to_string()),
-                bind_interval_secs: 10,
-                search_interval_secs: 10,
-                timeout_secs: 5,
-                search_check: Some(SearchCheckConfig {
-                    base: "dc=example,dc=com".to_string(),
-                    filter: "(objectClass=*)".to_string(),
-                    scope: SearchScope::Subtree,
-                }),
-            }
-        ],
+        ldaps: vec![LdapTargetConfig {
+            id: "local_ldap_sample".to_string(),
+            url: "ldap://localhost:389".to_string(),
+            bind_dn: Some("cn=admin,dc=example,dc=com".to_string()),
+            bind_password: Some("adminpassword".to_string()),
+            bind_interval_secs: 10,
+            search_interval_secs: 10,
+            timeout_secs: 5,
+            search_check: Some(SearchCheckConfig {
+                base: "dc=example,dc=com".to_string(),
+                filter: "(objectClass=*)".to_string(),
+                scope: SearchScope::Subtree,
+            }),
+        }],
     };
-    
+
     let content = if path.ends_with(".yaml") || path.ends_with(".yml") {
         serde_yaml::to_string(&default_cfg)?
     } else {
         serde_json::to_string_pretty(&default_cfg)?
     };
-    
+
     std::fs::write(path, content)?;
     Ok(default_cfg)
 }

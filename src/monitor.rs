@@ -1,10 +1,10 @@
+use chrono::{DateTime, Utc};
+use ldap3::LdapConnAsync;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
-use ldap3::LdapConnAsync;
 
 use crate::config::{Config, LdapTargetConfig};
 
@@ -39,11 +39,11 @@ impl MonitorManager {
             active_tokens: Arc::new(RwLock::new(Vec::new())),
         }
     }
-    
+
     pub async fn get_statuses(&self) -> HashMap<String, LdapStatus> {
         self.statuses.read().await.clone()
     }
-    
+
     pub async fn update_monitors(&self, config: &Config) {
         // Cancel all existing tasks
         {
@@ -53,14 +53,15 @@ impl MonitorManager {
             }
             tokens.clear();
         }
-        
+
         // Remove statuses of ldaps that are no longer in the config
         {
             let mut statuses_map = self.statuses.write().await;
-            let current_ids: std::collections::HashSet<&String> = config.ldaps.iter().map(|l| &l.id).collect();
+            let current_ids: std::collections::HashSet<&String> =
+                config.ldaps.iter().map(|l| &l.id).collect();
             statuses_map.retain(|id, _| current_ids.contains(id));
         }
-        
+
         // Spawn new tasks
         let mut tokens = self.active_tokens.write().await;
         for ldap_config in &config.ldaps {
@@ -79,7 +80,10 @@ impl MonitorManager {
                         bind_success: None,
                         last_search_time: None,
                         search_latency_ms: None,
-                        search_error_message: ldap_config.search_check.as_ref().map(|_| "Initialized, search check pending".to_string()),
+                        search_error_message: ldap_config
+                            .search_check
+                            .as_ref()
+                            .map(|_| "Initialized, search check pending".to_string()),
                         search_success: None,
                     },
                 );
@@ -98,11 +102,18 @@ impl MonitorManager {
                 tokens.push(search_token.clone());
                 let ldap_config_clone = ldap_config.clone();
                 let statuses_clone = self.statuses.clone();
-                tokio::spawn(run_search_loop(ldap_config_clone, statuses_clone, search_token));
+                tokio::spawn(run_search_loop(
+                    ldap_config_clone,
+                    statuses_clone,
+                    search_token,
+                ));
             }
         }
-        
-        tracing::info!("Spawned monitor tasks for {} LDAP targets", config.ldaps.len());
+
+        tracing::info!(
+            "Spawned monitor tasks for {} LDAP targets",
+            config.ldaps.len()
+        );
     }
 }
 
@@ -117,13 +128,13 @@ async fn run_bind_loop(
         let start = std::time::Instant::now();
         let check_result = perform_bind_check(&config).await;
         let duration = start.elapsed().as_millis() as u64;
-        
+
         {
             let mut map = statuses.write().await;
             if let Some(status) = map.get_mut(&config.id) {
                 status.last_bind_time = Some(Utc::now());
                 status.bind_latency_ms = Some(duration);
-                
+
                 match check_result {
                     Ok(()) => {
                         status.bind_success = Some(true);
@@ -146,14 +157,14 @@ async fn run_bind_loop(
                         );
                     }
                 }
-                
+
                 // Update combined status
                 let bind_ok = status.bind_success.unwrap_or(false);
                 let search_ok = status.search_success.unwrap_or(true);
                 status.up = bind_ok && search_ok;
             }
         }
-        
+
         tokio::select! {
             _ = token.cancelled() => {
                 tracing::info!("Bind loop for {} cancelled", config.id);
@@ -175,13 +186,13 @@ async fn run_search_loop(
         let start = std::time::Instant::now();
         let check_result = perform_search_check(&config).await;
         let duration = start.elapsed().as_millis() as u64;
-        
+
         {
             let mut map = statuses.write().await;
             if let Some(status) = map.get_mut(&config.id) {
                 status.last_search_time = Some(Utc::now());
                 status.search_latency_ms = Some(duration);
-                
+
                 match check_result {
                     Ok(()) => {
                         status.search_success = Some(true);
@@ -204,14 +215,14 @@ async fn run_search_loop(
                         );
                     }
                 }
-                
+
                 // Update combined status
                 let bind_ok = status.bind_success.unwrap_or(false);
                 let search_ok = status.search_success.unwrap_or(true);
                 status.up = bind_ok && search_ok;
             }
         }
-        
+
         tokio::select! {
             _ = token.cancelled() => {
                 tracing::info!("Search loop for {} cancelled", config.id);
@@ -224,18 +235,18 @@ async fn run_search_loop(
 
 async fn perform_bind_check(config: &LdapTargetConfig) -> Result<(), String> {
     let timeout_duration = std::time::Duration::from_secs(config.timeout_secs);
-    
+
     tokio::time::timeout(timeout_duration, async {
         let (conn, mut ldap) = LdapConnAsync::new(&config.url)
             .await
             .map_err(|e| format!("Connection error: {}", e))?;
-            
+
         tokio::spawn(async move {
             if let Err(e) = conn.drive().await {
                 tracing::debug!("LDAP drive error: {:?}", e);
             }
         });
-        
+
         if let Some(ref bind_dn) = config.bind_dn {
             let password = config.bind_password.as_deref().unwrap_or("");
             ldap.simple_bind(bind_dn, password)
@@ -251,7 +262,7 @@ async fn perform_bind_check(config: &LdapTargetConfig) -> Result<(), String> {
                 .success()
                 .map_err(|e| format!("Anonymous bind failed: {}", e))?;
         }
-        
+
         let _ = ldap.unbind().await;
         Ok(())
     })
@@ -264,20 +275,20 @@ async fn perform_search_check(config: &LdapTargetConfig) -> Result<(), String> {
         Some(ref s) => s,
         None => return Ok(()),
     };
-    
+
     let timeout_duration = std::time::Duration::from_secs(config.timeout_secs);
-    
+
     tokio::time::timeout(timeout_duration, async {
         let (conn, mut ldap) = LdapConnAsync::new(&config.url)
             .await
             .map_err(|e| format!("Connection error: {}", e))?;
-            
+
         tokio::spawn(async move {
             if let Err(e) = conn.drive().await {
                 tracing::debug!("LDAP drive error: {:?}", e);
             }
         });
-        
+
         // Before searching, perform credentials bind
         if let Some(ref bind_dn) = config.bind_dn {
             let password = config.bind_password.as_deref().unwrap_or("");
@@ -293,7 +304,7 @@ async fn perform_search_check(config: &LdapTargetConfig) -> Result<(), String> {
                 .success()
                 .map_err(|e| format!("Anonymous bind failed before search: {}", e))?;
         }
-        
+
         let search_result = ldap
             .search(
                 &search.base,
@@ -303,11 +314,11 @@ async fn perform_search_check(config: &LdapTargetConfig) -> Result<(), String> {
             )
             .await
             .map_err(|e| format!("Search error: {}", e))?;
-            
+
         let (_rs, _res) = search_result
             .success()
             .map_err(|e| format!("Search failed: {}", e))?;
-            
+
         let _ = ldap.unbind().await;
         Ok(())
     })

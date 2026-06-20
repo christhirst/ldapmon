@@ -1,13 +1,8 @@
-use std::sync::Arc;
 use axum::{
-    routing::get,
-    Router,
-    extract::State,
-    response::Json,
-    http::StatusCode,
-    response::IntoResponse,
+    Router, extract::State, http::StatusCode, response::IntoResponse, response::Json, routing::get,
 };
 use serde_json::json;
+use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::config::Config;

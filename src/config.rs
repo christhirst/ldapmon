@@ -12,16 +12,16 @@ pub struct LdapTargetConfig {
     pub url: String,
     pub bind_dn: Option<String>,
     pub bind_password: Option<String>,
-    
+
     #[serde(default = "default_check_interval")]
     pub bind_interval_secs: u64,
-    
+
     #[serde(default = "default_check_interval")]
     pub search_interval_secs: u64,
-    
+
     #[serde(default = "default_timeout")]
     pub timeout_secs: u64,
-    
+
     pub search_check: Option<SearchCheckConfig>,
 }
 
