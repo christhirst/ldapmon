@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::api::AppState;
-use crate::config::{Config, LdapTargetConfig, SearchCheckConfig, SearchScope};
+use crate::config::Config;
 use crate::monitor::MonitorManager;
 
 #[tokio::main]
@@ -22,39 +22,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing::info!("Starting LDAP Monitor...");
 
-    // 2. Determine configuration file path
+    // 2. Optional path argument; config-rs auto-discovers config.yaml/json/toml if omitted
     let args: Vec<String> = std::env::args().collect();
-    let config_path = if args.len() > 1 {
-        let path = args[1].clone();
-        let path_lower = path.to_lowercase();
-        if !path_lower.ends_with(".yaml") && !path_lower.ends_with(".yml") && !path_lower.ends_with(".json") {
-            anyhow::bail!(
-                "Configuration file must have a .yaml, .yml, or .json extension. Got: '{}'",
-                path
-            );
-        }
-        path
-    } else {
-        if std::path::Path::new("config.yaml").exists() {
-            "config.yaml".to_string()
-        } else if std::path::Path::new("config.json").exists() {
-            "config.json".to_string()
-        } else {
-            "config.yaml".to_string()
-        }
-    };
+    let config_arg = args.get(1).map(String::as_str);
 
-    // 3. Load or generate default configuration
-    let config = if !std::path::Path::new(&config_path).exists() {
-        tracing::info!(
-            "Config file not found. Generating default template at '{}'",
-            config_path
-        );
-        generate_default_config(&config_path)?
-    } else {
-        tracing::info!("Loading config from '{}'", config_path);
-        Config::load(&config_path)?
-    };
+    // 3. Load configuration via config-rs (format auto-detected from extension)
+    tracing::info!(
+        config = config_arg.unwrap_or("<auto-discover>"),
+        "Loading configuration"
+    );
+    let config = Config::load(config_arg)?;
 
     let bind_address = config.bind_address.clone();
     let config_arc = Arc::new(RwLock::new(config));
@@ -65,6 +42,11 @@ async fn main() -> Result<(), anyhow::Error> {
         let config_read = config_arc.read().await;
         monitor_manager.update_monitors(&config_read).await;
     }
+
+    // config_path is used by the REST API to persist updates; default to config.json
+    let config_path = config_arg
+        .unwrap_or("config.json")
+        .to_string();
 
     // 5. Build application state and router
     let state = Arc::new(AppState {
@@ -87,29 +69,4 @@ async fn main() -> Result<(), anyhow::Error> {
         .context("Error running Axum server")?;
 
     Ok(())
-}
-
-fn generate_default_config(path: &str) -> Result<Config, anyhow::Error> {
-    let default_cfg = Config {
-        bind_address: "0.0.0.0:8080".to_string(),
-        ldaps: vec![LdapTargetConfig {
-            id: "local_ldap_sample".to_string(),
-            url: "ldap://localhost:389".to_string(),
-            bind_dn: Some("cn=admin,dc=example,dc=com".to_string()),
-            bind_password: Some("adminpassword".to_string()),
-            bind_interval_secs: 10,
-            search_interval_secs: 10,
-            timeout_secs: 5,
-            search_check: Some(SearchCheckConfig {
-                base: "dc=example,dc=com".to_string(),
-                filter: "(objectClass=*)".to_string(),
-                scope: SearchScope::Subtree,
-            }),
-        }],
-    };
-
-    // config-rs can load back any supported format; we persist as JSON
-    let content = serde_json::to_string_pretty(&default_cfg)?;
-    std::fs::write(path, content)?;
-    Ok(default_cfg)
 }
