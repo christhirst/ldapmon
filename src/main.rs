@@ -9,7 +9,6 @@ use tokio::sync::RwLock;
 use crate::api::AppState;
 use crate::config::{Config, LdapTargetConfig, SearchCheckConfig, SearchScope};
 use crate::monitor::MonitorManager;
-use ::config::{Config as ConfigReader, File as ConfigFile};
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
@@ -54,13 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
         generate_default_config(&config_path)?
     } else {
         tracing::info!("Loading config from '{}'", config_path);
-        let settings = ConfigReader::builder()
-            .add_source(ConfigFile::from(std::path::Path::new(&config_path)))
-            .build()
-            .with_context(|| format!("Failed to build configuration from '{}'", config_path))?;
-            
-        settings.try_deserialize::<Config>()
-            .with_context(|| format!("Failed to parse configuration from '{}'", config_path))?
+        Config::load(&config_path)?
     };
 
     let bind_address = config.bind_address.clone();

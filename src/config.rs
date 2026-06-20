@@ -1,4 +1,18 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
+
+impl Config {
+    /// Load configuration from `path` using config-rs.
+    /// The format (JSON, YAML, TOML, …) is auto-detected from the file extension.
+    pub fn load(path: &str) -> Result<Self, anyhow::Error> {
+        ::config::Config::builder()
+            .add_source(::config::File::from(std::path::Path::new(path)))
+            .build()
+            .with_context(|| format!("Failed to read config file '{}'", path))?
+            .try_deserialize::<Self>()
+            .with_context(|| format!("Failed to parse config file '{}'", path))
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Config {
