@@ -22,9 +22,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing::info!("Starting LDAP Monitor...");
 
-    // 2. Optional path argument; config-rs auto-discovers config.yaml/json/toml if omitted
+    // 2. Parse optional --config <path> flag; fall back to config-rs auto-discovery
     let args: Vec<String> = std::env::args().collect();
-    let config_arg = args.get(1).map(String::as_str);
+    let config_arg: Option<&str> = args
+        .windows(2)
+        .find(|w| w[0] == "--config")
+        .map(|w| w[1].as_str());
 
     // 3. Load configuration via config-rs (format auto-detected from extension)
     tracing::info!(
