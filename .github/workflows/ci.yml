@@ -22,7 +22,7 @@ jobs:
             - name: Set up Rust
               uses: dtolnay/rust-toolchain@stable
               with:
-                  components: clippy, rustfmt
+                  components: clippy
 
             - name: Cache Cargo Dependencies
               uses: actions/cache@v4
