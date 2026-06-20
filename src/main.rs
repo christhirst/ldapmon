@@ -115,12 +115,8 @@ fn generate_default_config(path: &str) -> Result<Config, anyhow::Error> {
         }],
     };
 
-    let content = if path.ends_with(".yaml") || path.ends_with(".yml") {
-        serde_yaml::to_string(&default_cfg)?
-    } else {
-        serde_json::to_string_pretty(&default_cfg)?
-    };
-
+    // config-rs can load back any supported format; we persist as JSON
+    let content = serde_json::to_string_pretty(&default_cfg)?;
     std::fs::write(path, content)?;
     Ok(default_cfg)
 }

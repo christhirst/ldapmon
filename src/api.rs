@@ -73,27 +73,18 @@ async fn update_config(
     State(state): State<Arc<AppState>>,
     Json(new_config): Json<Config>,
 ) -> impl IntoResponse {
-    // 1. Serialize new configuration to match the extension of configuration file
-    let path = state.config_path.to_lowercase();
-    let serialization_result = if path.ends_with(".yaml") || path.ends_with(".yml") {
-        serde_yaml::to_string(&new_config)
-            .map_err(|e| format!("Failed to serialize to YAML: {}", e))
-    } else {
-        serde_json::to_string_pretty(&new_config)
-            .map_err(|e| format!("Failed to serialize to JSON: {}", e))
-    };
-
-    let serialized_content = match serialization_result {
+    // Serialize to JSON — config-rs can load it back regardless of file extension
+    let serialized_content = match serde_json::to_string_pretty(&new_config) {
         Ok(content) => content,
-        Err(err_msg) => {
+        Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({ "status": "error", "message": err_msg })),
+                Json(json!({ "status": "error", "message": format!("Failed to serialize config: {}", e) })),
             );
         }
     };
 
-    // 2. Persist the configuration to the file on disk
+    // Persist the configuration to the file on disk
     if let Err(e) = std::fs::write(&state.config_path, serialized_content) {
         let err_msg = format!("Failed to write configuration file to disk: {}", e);
         tracing::error!("{}", err_msg);
