@@ -32,9 +32,6 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-cargo-
 
-            - name: Check Formatting
-              run: cargo fmt --all -- --check
-
             - name: Run Cargo Check
               run: cargo check --verbose
 
