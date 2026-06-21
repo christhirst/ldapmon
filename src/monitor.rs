@@ -234,6 +234,9 @@ async fn run_search_loop(
 }
 
 /// Build an LDAP connection using the TLS settings from the config.
+/// If `tls` is set and `starttls` is false, the URL scheme is automatically
+/// rewritten from `ldap://` to `ldaps://` (and port 389 → 636) so callers
+/// don't have to change the URL when enabling TLS.
 async fn build_ldap_conn(
     url: &str,
     tls: Option<&TlsConfig>,
@@ -241,6 +244,30 @@ async fn build_ldap_conn(
     use ldap3::LdapConnSettings;
     use rustls::ClientConfig;
     use std::sync::Arc;
+
+    // Derive the effective URL: if TLS is configured (non-STARTTLS), promote
+    // ldap:// → ldaps:// and the default plain-text port 389 → 636.
+    let effective_url: String = match tls {
+        Some(tls_cfg) if !tls_cfg.starttls && url.starts_with("ldap://") => {
+            let without_scheme = &url["ldap://".len()..];
+            // Replace :389 suffix with :636 only when it is the default plain port
+            let host_port = if without_scheme.ends_with(":389") {
+                format!("{}636", &without_scheme[..without_scheme.len() - 3])
+            } else if !without_scheme.contains(':') {
+                // No port at all — append the standard LDAPS port
+                format!("{}:636", without_scheme)
+            } else {
+                without_scheme.to_string()
+            };
+            tracing::debug!(
+                original = url,
+                effective = %format!("ldaps://{}", host_port),
+                "Rewrote URL scheme for TLS connection"
+            );
+            format!("ldaps://{}", host_port)
+        }
+        _ => url.to_string(),
+    };
 
     let settings = match tls {
         None => LdapConnSettings::new(),
@@ -318,7 +345,7 @@ async fn build_ldap_conn(
         }
     };
 
-    LdapConnAsync::with_settings(settings, url)
+    LdapConnAsync::with_settings(settings, &effective_url)
         .await
         .map_err(|e| format!("Connection error: {}", e))
 }
