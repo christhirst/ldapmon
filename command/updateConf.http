@@ -1,0 +1,117 @@
+### Get current config
+GET http://localhost:8080/config
+Accept: application/json
+
+###
+
+### Update config — plain LDAP (no TLS)
+POST http://localhost:8080/config
+Content-Type: application/json
+
+{
+  "bind_address": "0.0.0.0:8080",
+  "ldaps": [
+    {
+      "id": "local_ldap",
+      "url": "ldap://localhost:389",
+      "bind_dn": "cn=admin,dc=example,dc=com",
+      "bind_password": "adminpassword",
+      "bind_interval_secs": 30,
+      "search_interval_secs": 60,
+      "timeout_secs": 5,
+      "search_check": {
+        "base": "dc=example,dc=com",
+        "filter": "(objectClass=*)",
+        "scope": "Subtree"
+      },
+      "tls": null
+    }
+  ]
+}
+
+###
+
+### Update config — LDAPS with custom CA (URL auto-promoted to ldaps://)
+POST http://localhost:8080/config
+Content-Type: application/json
+
+{
+  "bind_address": "0.0.0.0:8080",
+  "ldaps": [
+    {
+      "id": "prod_ldaps",
+      "url": "ldap://ldap.example.com:389",
+      "bind_dn": "cn=svc-monitor,dc=example,dc=com",
+      "bind_password": "s3cr3t",
+      "bind_interval_secs": 30,
+      "search_interval_secs": 60,
+      "timeout_secs": 5,
+      "search_check": {
+        "base": "dc=example,dc=com",
+        "filter": "(objectClass=organizationalUnit)",
+        "scope": "OneLevel"
+      },
+      "tls": {
+        "ca_cert": "/etc/certs/internal-ca.pem",
+        "insecure": false
+      }
+    }
+  ]
+}
+
+###
+
+### Update config — LDAPS with mTLS (client cert + key)
+POST http://localhost:8080/config
+Content-Type: application/json
+
+{
+  "bind_address": "0.0.0.0:8080",
+  "ldaps": [
+    {
+      "id": "mtls_ldap",
+      "url": "ldap://ldap.internal:389",
+      "bind_dn": null,
+      "bind_password": null,
+      "bind_interval_secs": 10,
+      "search_interval_secs": 30,
+      "timeout_secs": 5,
+      "search_check": null,
+      "tls": {
+        "ca_cert": "/etc/certs/ca.pem",
+        "client_cert": "/etc/certs/client.pem",
+        "client_key": "/etc/certs/client-key.pem",
+        "insecure": false
+      }
+    }
+  ]
+}
+
+###
+
+### Update config — LDAPS insecure (skip cert verification, for testing)
+POST http://localhost:8080/config
+Content-Type: application/json
+
+{
+  "bind_address": "0.0.0.0:8080",
+  "ldaps": [
+    {
+      "id": "dev_ldap",
+      "url": "ldap://localhost:389",
+      "bind_dn": "cn=admin,dc=example,dc=com",
+      "bind_password": "adminpassword",
+      "bind_interval_secs": 10,
+      "search_interval_secs": 10,
+      "timeout_secs": 5,
+      "search_check": {
+        "base": "dc=example,dc=com",
+        "filter": "(objectClass=*)",
+        "scope": "Subtree"
+      },
+      "tls": {
+        "insecure": true
+      }
+    }
+  ]
+}
