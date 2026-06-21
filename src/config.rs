@@ -66,9 +66,6 @@ pub struct TlsConfig {
     /// Skip server certificate verification. **Insecure — for testing only.**
     #[serde(default)]
     pub insecure: bool,
-    /// Use STARTTLS instead of a direct LDAPS connection.
-    #[serde(default)]
-    pub starttls: bool,
 }
 
 fn default_check_interval() -> u64 {
