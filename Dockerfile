@@ -16,12 +16,9 @@ COPY . .
 RUN cargo build --release
 
 # --- Runtime Stage ---
-FROM debian:bookworm-slim
-
-# Install ca-certificates (crucial for LDAPS connections)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# gcr.io/distroless/cc-debian12 provides libc + libgcc (needed by Rust binaries)
+# and ships Mozilla's CA bundle — no shell or package manager included.
+FROM gcr.io/distroless/cc-debian12
 
 WORKDIR /app
 
@@ -37,5 +34,5 @@ ENV RUST_LOG=ldapmon=info,info
 # Expose REST API port
 EXPOSE 8080
 
-# Command to run the application, looking for config in the app directory
-ENTRYPOINT ["/app/ldapmon", "/app/config.yaml"]
+# Command to run the application (JSON array required — distroless has no shell)
+ENTRYPOINT ["/app/ldapmon"]
