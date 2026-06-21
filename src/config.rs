@@ -45,6 +45,30 @@ pub struct LdapTargetConfig {
     pub timeout_secs: u64,
 
     pub search_check: Option<SearchCheckConfig>,
+
+    /// TLS configuration for LDAPS or STARTTLS connections.
+    pub tls: Option<TlsConfig>,
+}
+
+/// TLS settings for an LDAP target.
+///
+/// Use `ca_cert` to trust a private/self-signed CA.
+/// Use `client_cert` + `client_key` for mutual TLS (mTLS).
+/// Set `insecure = true` to skip certificate verification (testing only).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TlsConfig {
+    /// Path to a PEM-encoded CA certificate to add to the trust store.
+    pub ca_cert: Option<String>,
+    /// Path to a PEM-encoded client certificate for mTLS.
+    pub client_cert: Option<String>,
+    /// Path to a PEM-encoded private key matching `client_cert`.
+    pub client_key: Option<String>,
+    /// Skip server certificate verification. **Insecure — for testing only.**
+    #[serde(default)]
+    pub insecure: bool,
+    /// Use STARTTLS instead of a direct LDAPS connection.
+    #[serde(default)]
+    pub starttls: bool,
 }
 
 fn default_check_interval() -> u64 {

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::config::{Config, LdapTargetConfig};
+use crate::config::{Config, LdapTargetConfig, TlsConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LdapStatus {
@@ -233,13 +233,142 @@ async fn run_search_loop(
     }
 }
 
+/// Build an LDAP connection using the TLS settings from the config.
+async fn build_ldap_conn(
+    url: &str,
+    tls: Option<&TlsConfig>,
+) -> Result<(ldap3::LdapConnAsync, ldap3::Ldap), String> {
+    use ldap3::LdapConnSettings;
+    use rustls::ClientConfig;
+    use std::sync::Arc;
+
+    let settings = match tls {
+        None => LdapConnSettings::new(),
+        Some(tls_cfg) => {
+            // Start from the system root store
+            let mut root_store = rustls::RootCertStore {
+                roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+            };
+
+            // Add a custom CA certificate if provided
+            if let Some(ca_path) = &tls_cfg.ca_cert {
+                let ca_pem = std::fs::read(ca_path)
+                    .map_err(|e| format!("Failed to read CA cert '{}': {}", ca_path, e))?;
+                let mut cursor = std::io::Cursor::new(ca_pem);
+                for cert in rustls_pemfile::certs(&mut cursor) {
+                    let cert = cert.map_err(|e| format!("Invalid CA cert PEM: {}", e))?;
+                    root_store.add(cert).map_err(|e| format!("Failed to add CA cert: {}", e))?;
+                }
+            }
+
+            let builder = ClientConfig::builder_with_provider(
+                rustls::crypto::ring::default_provider().into(),
+            )
+            .with_safe_default_protocol_versions()
+            .map_err(|e| format!("TLS protocol error: {}", e))?;
+
+            // Choose client auth vs. no client auth
+            let client_config = if let (Some(cert_path), Some(key_path)) =
+                (&tls_cfg.client_cert, &tls_cfg.client_key)
+            {
+                // mTLS: load client certificate chain and private key
+                let cert_pem = std::fs::read(cert_path)
+                    .map_err(|e| format!("Failed to read client cert '{}': {}", cert_path, e))?;
+                let key_pem = std::fs::read(key_path)
+                    .map_err(|e| format!("Failed to read client key '{}': {}", key_path, e))?;
+
+                let certs: Vec<rustls::pki_types::CertificateDer<'static>> =
+                    rustls_pemfile::certs(&mut std::io::Cursor::new(cert_pem))
+                        .collect::<Result<_, _>>()
+                        .map_err(|e| format!("Invalid client cert PEM: {}", e))?;
+
+                let key = rustls_pemfile::private_key(&mut std::io::Cursor::new(key_pem))
+                    .map_err(|e| format!("Failed to read private key: {}", e))?
+                    .ok_or_else(|| "No private key found in PEM file".to_string())?;
+
+                if tls_cfg.insecure {
+                    builder
+                        .dangerous()
+                        .with_custom_certificate_verifier(Arc::new(NoCertVerifier))
+                        .with_client_auth_cert(certs, key)
+                        .map_err(|e| format!("mTLS config error: {}", e))?
+                } else {
+                    builder
+                        .with_root_certificates(root_store)
+                        .with_client_auth_cert(certs, key)
+                        .map_err(|e| format!("mTLS config error: {}", e))?
+                }
+            } else if tls_cfg.insecure {
+                builder
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(NoCertVerifier))
+                    .with_no_client_auth()
+            } else {
+                builder
+                    .with_root_certificates(root_store)
+                    .with_no_client_auth()
+            };
+
+            let mut settings = LdapConnSettings::new()
+                .set_config(Arc::new(client_config));
+            if tls_cfg.starttls {
+                settings = settings.set_starttls(true);
+            }
+            settings
+        }
+    };
+
+    LdapConnAsync::with_settings(settings, url)
+        .await
+        .map_err(|e| format!("Connection error: {}", e))
+}
+
+/// A rustls certificate verifier that accepts any certificate (insecure).
+#[derive(Debug)]
+struct NoCertVerifier;
+
+impl rustls::client::danger::ServerCertVerifier for NoCertVerifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::pki_types::CertificateDer<'_>,
+        _intermediates: &[rustls::pki_types::CertificateDer<'_>],
+        _server_name: &rustls::pki_types::ServerName<'_>,
+        _ocsp_response: &[u8],
+        _now: rustls::pki_types::UnixTime,
+    ) -> Result<rustls::client::danger::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::danger::ServerCertVerified::assertion())
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::pki_types::CertificateDer<'_>,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::danger::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::danger::HandshakeSignatureValid::assertion())
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
+        rustls::crypto::ring::default_provider()
+            .signature_verification_algorithms
+            .supported_schemes()
+    }
+}
+
 async fn perform_bind_check(config: &LdapTargetConfig) -> Result<(), String> {
     let timeout_duration = std::time::Duration::from_secs(config.timeout_secs);
 
     tokio::time::timeout(timeout_duration, async {
-        let (conn, mut ldap) = LdapConnAsync::new(&config.url)
-            .await
-            .map_err(|e| format!("Connection error: {}", e))?;
+        let (conn, mut ldap) = build_ldap_conn(&config.url, config.tls.as_ref()).await?;
 
         tokio::spawn(async move {
             if let Err(e) = conn.drive().await {
@@ -279,9 +408,7 @@ async fn perform_search_check(config: &LdapTargetConfig) -> Result<(), String> {
     let timeout_duration = std::time::Duration::from_secs(config.timeout_secs);
 
     tokio::time::timeout(timeout_duration, async {
-        let (conn, mut ldap) = LdapConnAsync::new(&config.url)
-            .await
-            .map_err(|e| format!("Connection error: {}", e))?;
+        let (conn, mut ldap) = build_ldap_conn(&config.url, config.tls.as_ref()).await?;
 
         tokio::spawn(async move {
             if let Err(e) = conn.drive().await {
