@@ -1,7 +1,6 @@
 # --- Build Stage ---
 FROM rust:1.96-slim AS builder
 
-# Install system dependencies needed for compiling
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libssl-dev \
@@ -9,10 +8,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /usr/src/ldapmon
 
-# Copy source code
-COPY . .
+# Cache dependencies as a separate layer.
+# This layer is only invalidated when Cargo.toml or Cargo.lock change,
+# not on every source edit.
+COPY Cargo.toml Cargo.lock ./
+RUN cargo fetch
 
-# Build the release binary
+# Copy source and build
+COPY src ./src
 RUN cargo build --release
 
 # --- Runtime Stage ---
@@ -22,17 +25,12 @@ FROM gcr.io/distroless/cc-debian12
 
 WORKDIR /app
 
-# Copy binary from builder stage
 COPY --from=builder /usr/src/ldapmon/target/release/ldapmon /app/ldapmon
 
-# Create a default volume or directory for the config file
 VOLUME /app/config
 
-# Set default env variable for tracing/logging
 ENV RUST_LOG=ldapmon=info,info
 
-# Expose REST API port
 EXPOSE 8080
 
-# Command to run the application (JSON array required — distroless has no shell)
 ENTRYPOINT ["/app/ldapmon"]

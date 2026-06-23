@@ -9,6 +9,8 @@ jobs:
     helm-publish:
         name: Helm Package & Push
         runs-on: ubuntu-latest
+        permissions:
+            packages: write
 
         steps:
             - name: Checkout Repository
@@ -37,13 +39,14 @@ jobs:
             - name: Package Helm Chart
               run: helm package chart/ --destination ./helm-dist/
 
-            - name: Log in to DockerHub
+            - name: Log in to GHCR
               uses: docker/login-action@v3
               with:
-                  username: ${{ secrets.DOCKERHUB_USERNAME }}
-                  password: ${{ secrets.DOCKERHUB_TOKEN }}
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Push Helm chart to DockerHub OCI
+            - name: Push Helm chart to GHCR
               run: |
                   helm push ./helm-dist/ldapmon-*.tgz \
-                    oci://registry-1.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/charts
+                    oci://ghcr.io/${{ github.repository_owner }}/charts

@@ -31,6 +31,6 @@ REST API endpoints:
   POST /config        — update configuration at runtime
 
 To update the ldapmon configuration, edit the chart values and upgrade:
-  helm upgrade {{ .Release.Name }} oci://registry-1.docker.io/christhirst/charts/ldapmon \
+  helm upgrade {{ .Release.Name }} oci://ghcr.io/christhirst/charts/ldapmon \
     --reuse-values \
     -f my-values.yaml
