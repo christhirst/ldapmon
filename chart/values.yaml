@@ -3,7 +3,7 @@
 replicaCount: 1
 
 image:
-  repository: christhirst/ldapmon
+  repository: raynkami/ldapmon
   pullPolicy: IfNotPresent
   tag: "latest"
 

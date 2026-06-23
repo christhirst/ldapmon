@@ -11,7 +11,7 @@ keywords:
   - observability
 
 maintainers:
-  - name: christhirst
+  - name: raynkami
 
 sources:
-  - https://github.com/christhirst/ldapmon
+  - https://github.com/raynkami/ldapmon

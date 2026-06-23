@@ -8,8 +8,8 @@ on:
 
 env:
     CARGO_TERM_COLOR: always
-    DOCKERHUB_USERNAME: christhirst
-    IMAGE_NAME: christhirst/ldapmon
+    DOCKERHUB_USERNAME: raynkami
+    IMAGE_NAME: raynkami/ldapmon
 
 jobs:
     # -----------------------------------------------------------------------
