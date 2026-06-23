@@ -1,0 +1,33 @@
+# Default values for ldapmon.
+
+replicaCount: 1
+
+image:
+  repository: christhirst/ldapmon
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+serviceAccount:
+  create: true
+  name: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 32Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
+
+env:
+  RUST_LOG: "ldapmon=info,info"
+
+# ---------------------------------------------------------------------------
+# ldapmon application configuration
+# Edit chart/config.yaml directly — it is loaded verbatim into the ConfigMap
+# and mounted at /app/config/config.yaml inside the container.
+# ---------------------------------------------------------------------------

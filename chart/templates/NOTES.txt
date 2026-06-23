@@ -1,0 +1,36 @@
+Thank you for installing ldapmon {{ .Chart.AppVersion }}!
+
+The application is now deploying. Check pod status with:
+
+  kubectl get pods -l app.kubernetes.io/name=ldapmon -n {{ .Release.Namespace }}
+
+Get the application URL:
+{{- if eq .Values.service.type "LoadBalancer" }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  Watch its status with:
+    kubectl get svc {{ include "ldapmon.fullname" . }} -n {{ .Release.Namespace }} -w
+
+  export SERVICE_IP=$(kubectl get svc {{ include "ldapmon.fullname" . }} -n {{ .Release.Namespace }} \
+    -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+  echo "http://$SERVICE_IP:{{ .Values.service.port }}"
+{{- else if eq .Values.service.type "NodePort" }}
+  export NODE_PORT=$(kubectl get svc {{ include "ldapmon.fullname" . }} -n {{ .Release.Namespace }} \
+    -o jsonpath='{.spec.ports[0].nodePort}')
+  export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[0].address}')
+  echo "http://$NODE_IP:$NODE_PORT"
+{{- else }}
+  # ClusterIP — forward a local port to access the API
+  kubectl port-forward svc/{{ include "ldapmon.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+
+  # Then open: http://localhost:8080/health
+{{- end }}
+
+REST API endpoints:
+  GET  /health        — liveness check
+  GET  /monitors      — list all monitored LDAP targets and their status
+  POST /config        — update configuration at runtime
+
+To update the ldapmon configuration, edit the chart values and upgrade:
+  helm upgrade {{ .Release.Name }} oci://registry-1.docker.io/christhirst/charts/ldapmon \
+    --reuse-values \
+    -f my-values.yaml

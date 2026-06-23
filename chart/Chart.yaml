@@ -1,0 +1,17 @@
+apiVersion: v2
+name: ldapmon
+description: A Helm chart for ldapmon - a lightweight LDAP connectivity monitor with a REST API
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - ldap
+  - monitoring
+  - observability
+
+maintainers:
+  - name: christhirst
+
+sources:
+  - https://github.com/christhirst/ldapmon

@@ -3,14 +3,19 @@ name: CI
 on:
     push:
         branches: ["main", "master"]
+        tags: ["v*.*.*"]
     pull_request:
         branches: ["main", "master"]
 
 env:
     CARGO_TERM_COLOR: always
     DOCKERHUB_USERNAME: christhirst
+    IMAGE_NAME: christhirst/ldapmon
 
 jobs:
+    # -----------------------------------------------------------------------
+    # Job 1: Rust build & test
+    # -----------------------------------------------------------------------
     rust-ci:
         name: Rust Build & Test
         runs-on: ubuntu-latest
@@ -38,8 +43,11 @@ jobs:
             - name: Run Tests
               run: cargo test --verbose
 
-    docker-ci:
-        name: Docker Build Verification
+    # -----------------------------------------------------------------------
+    # Job 2: Docker build & push to DockerHub
+    # -----------------------------------------------------------------------
+    docker-publish:
+        name: Docker Build & Push
         runs-on: ubuntu-latest
         needs: rust-ci
 
@@ -57,12 +65,76 @@ jobs:
                   username: ${{ secrets.DOCKERHUB_USERNAME }}
                   password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+            # Compute image tags:
+            #   - Every push to main/master → :latest + :<short-sha>
+            #   - Git tag push (v*.*.*) → :v1.2.3 + :latest + :<short-sha>
+            - name: Extract Docker metadata
+              id: meta
+              uses: docker/metadata-action@v5
+              with:
+                  images: ${{ env.IMAGE_NAME }}
+                  tags: |
+                      type=raw,value=latest,enable={{is_default_branch}}
+                      type=sha,prefix=sha-,format=short
+                      type=semver,pattern={{version}}
+                      type=semver,pattern={{major}}.{{minor}}
+
             - name: Build and Push Docker Image
-              uses: docker/build-push-action@v5
+              uses: docker/build-push-action@v6
               with:
                   context: .
                   file: ./Dockerfile
                   push: ${{ github.event_name != 'pull_request' }}
-                  tags: |
-                      ${{ secrets.DOCKERHUB_USERNAME }}/ldapmon:latest
-                      ${{ secrets.DOCKERHUB_USERNAME }}/ldapmon:${{ github.sha }}
+                  tags: ${{ steps.meta.outputs.tags }}
+                  labels: ${{ steps.meta.outputs.labels }}
+                  cache-from: type=gha
+                  cache-to: type=gha,mode=max
+
+    # -----------------------------------------------------------------------
+    # Job 3: Helm lint, package, and push to DockerHub OCI registry
+    # -----------------------------------------------------------------------
+    helm-publish:
+        name: Helm Package & Push
+        runs-on: ubuntu-latest
+        needs: docker-publish
+
+        steps:
+            - name: Checkout Repository
+              uses: actions/checkout@v4
+
+            - name: Set up Helm
+              uses: azure/setup-helm@v4
+              with:
+                  version: "v3.17.0"
+
+            - name: Lint Helm Chart
+              run: helm lint chart/
+
+            - name: Render templates (dry-run validation)
+              run: helm template ldapmon chart/ --debug > /dev/null
+
+            # On tag pushes, update chart version to match the Git tag (strip leading 'v')
+            - name: Set chart version from Git tag
+              if: startsWith(github.ref, 'refs/tags/v')
+              run: |
+                  TAG="${GITHUB_REF_NAME#v}"
+                  sed -i "s/^version:.*/version: ${TAG}/" chart/Chart.yaml
+                  sed -i "s/^appVersion:.*/appVersion: \"${TAG}\"/" chart/Chart.yaml
+                  echo "Chart version set to ${TAG}"
+
+            - name: Package Helm Chart
+              run: helm package chart/ --destination ./helm-dist/
+
+            - name: Log in to DockerHub OCI registry
+              if: github.event_name != 'pull_request'
+              run: |
+                  echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
+                  helm registry login registry-1.docker.io \
+                    --username "${{ secrets.DOCKERHUB_USERNAME }}" \
+                    --password-stdin
+
+            - name: Push Helm chart to DockerHub OCI
+              if: github.event_name != 'pull_request'
+              run: |
+                  helm push ./helm-dist/ldapmon-*.tgz \
+                    oci://registry-1.docker.io/${{ secrets.DOCKERHUB_USERNAME }}/charts

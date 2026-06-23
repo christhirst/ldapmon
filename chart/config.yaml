@@ -1,0 +1,19 @@
+bind_address: 0.0.0.0:8080
+ldaps:
+    - id: local_ldap_sample
+      url: ldap://localhost:389
+      bind_dn: cn=admin,dc=example,dc=com
+      bind_password: adminpassword
+      bind_interval_secs: 100
+      search_interval_secs: 100
+      timeout_secs: 50
+      search_check:
+          base: dc=example,dc=com
+          filter: (objectClass=*)
+          scope: Subtree
+      tls:
+          insecure: true
+          #ca_cert: /etc/certs/internal-ca.pem
+          #client_cert: /etc/certs/cert.pem // optional — mTLS only
+          #client_key: /etc/certs/key.pem"   // optional — mTLS only
+          #insecure: false
