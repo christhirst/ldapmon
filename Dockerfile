@@ -11,7 +11,7 @@ WORKDIR /usr/src/ldapmon
 # Cache dependencies as a separate layer.
 # This layer is only invalidated when Cargo.toml or Cargo.lock change,
 # not on every source edit.
-COPY Cargo.toml Cargo.lock ./
+COPY Cargo.toml ./
 RUN cargo fetch
 
 # Copy source and build
