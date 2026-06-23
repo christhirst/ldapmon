@@ -37,12 +37,12 @@ jobs:
             - name: Package Helm Chart
               run: helm package chart/ --destination ./helm-dist/
 
-            - name: Log in to DockerHub OCI registry
+            - name: Configure Helm DockerHub credentials
               run: |
-                  echo "${{ secrets.DOCKERHUB_TOKEN }}" | \
-                  helm registry login registry-1.docker.io \
-                    --username "${{ secrets.DOCKERHUB_USERNAME }}" \
-                    --password-stdin
+                  mkdir -p ~/.config/helm/registry
+                  AUTH=$(echo -n "${{ secrets.DOCKERHUB_USERNAME }}:${{ secrets.DOCKERHUB_TOKEN }}" | base64 -w 0)
+                  echo "{\"auths\":{\"registry-1.docker.io\":{\"auth\":\"${AUTH}\"}}}" \
+                    > ~/.config/helm/registry/config.json
 
             - name: Push Helm chart to DockerHub OCI
               run: |
