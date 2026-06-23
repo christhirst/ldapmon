@@ -12,6 +12,7 @@ WORKDIR /usr/src/ldapmon
 # This layer is only invalidated when Cargo.toml or Cargo.lock change,
 # not on every source edit.
 COPY Cargo.toml ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs
 RUN cargo fetch
 
 # Copy source and build
